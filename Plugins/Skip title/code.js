@@ -126,7 +126,9 @@ Manager.Plugins.registerCommand(pluginName, "Slot exists?", async (slot, variabl
 {
 	const waitCommand = addCustomWaitCommand();
 	Core.Game.current.variables.set(variable, -1);
-	Core.Game.current.variables.set(variable, await Common.IO.fileExists(Common.Paths.SAVES + "/" + slot + ".json"));
+	var res = await Common.IO.fileExists(Common.Paths.SAVES + "/" + slot + ".json");
+	Core.Game.current.variables.set(variable, res);
+	console.log(res);
 	waitCommand.data.asyncSaveLoadFinished = true;
 });
 

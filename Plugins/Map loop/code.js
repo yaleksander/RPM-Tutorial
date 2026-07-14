@@ -5,8 +5,90 @@ const dummy = new THREE.Object3D();
 const oldFunc = Core.MapObject.prototype.getFuturPosition;
 Core.MapObject.prototype.getFuturPosition = function(orientation, distance, angle)
 {
-	// do map loop calculations, change position accordingly
-	return oldFunc.call(this, orientation, distance, angle);
+	const w = Scene.Map.current.mapProperties.length;
+	const h = Scene.Map.current.mapProperties.width;
+	const dx = distance * Math.cos((angle + this.orientation * 90.0) * Math.PI / 180.0);
+	const dz = distance * Math.sin((angle + this.orientation * 90.0) * Math.PI / 180.0);
+	var position = new THREE.Vector3(this.previousPosition.x - dx, this.previousPosition.y, this.previousPosition.z - dz);
+	var halfBBX = 0;
+	var halfBBZ = 0;
+	const bb = this.boundingBoxSettings?.b;
+	if (bb)
+	{
+		const isFace = this.currentStateInstance?.graphicKind === Common.ELEMENT_MAP_KIND.SPRITES_FACE;
+		for (const b of bb)
+		{
+			const ex = b[3] / 2 + Math.abs(b[0]);
+			const ez = (isFace ? b[3] : b[5]) / 2 + Math.abs(b[2]);
+			if (ex > halfBBX)
+				halfBBX = ex;
+			if (ez > halfBBZ)
+				halfBBZ = ez;
+		}
+	}
+	if (Scene.Map.current.mapLoopPlugin_loopX)
+		position.x = (position.x + w) % w;
+	else if (position.x < halfBBX || position.x >= w - halfBBX)
+		position.setX(Math.max(halfBBX, Math.min(position.x, w - halfBBX)));
+	if (Scene.Map.current.mapLoopPlugin_loopZ)
+		position.z = (position.z + h) % h;
+	else if (position.z < halfBBZ || position.z >= h - halfBBZ)
+		position.setZ(Math.max(halfBBZ, Math.min(position.z, h - halfBBZ)));
+
+	// Collision
+	this.updateBBPosition(position);
+	var yMountain = null;
+	var blocked = false;
+	var o = Common.ORIENTATION.NONE;
+	var result;
+	const l = this.meshBoundingBox?.length ?? 0;
+	for (var i = 0; i < l; i++)
+	{
+		this.currentBoundingBox = this.meshBoundingBox[i];
+		result = Manager.Collisions.checkRay(this.position, position, this, this.boundingBoxSettings.b[i]);
+		if (result[1] !== null)
+			yMountain = result[1];
+		if (result[0] || result[0] === null)
+		{
+			blocked = result[0];
+			if (blocked === null)
+			{
+				o = result[2];
+				continue;
+			}
+		}
+	}
+
+	// No collision box: still detect terrain height without blocking
+	if (l === 0)
+	{
+		result = Manager.Collisions.checkRay(this.position, position, this, []);
+		if (result[1] !== null)
+			yMountain = result[1];
+	}
+	if (blocked || (blocked === null && yMountain !== null))
+		position = this.position.clone();
+
+	// If not blocked and possible Y up/down, check if there is no collision on top
+	if (!blocked && yMountain !== null)
+	{
+		const yDelta = yMountain - this.position.y;
+		position.setY(this.position.y + Math.sign(yDelta) * Math.min(Math.abs(yDelta), distance));
+		this.updateBBPosition(position);
+		for (var i = 0; i < l; i++)
+		{
+			this.currentBoundingBox = this.meshBoundingBox[i];
+			result = Manager.Collisions.checkRay(this.position, position, this, this.boundingBoxSettings.b[i], true);
+			if (result[0])
+			{
+				position = this.position;
+				break;
+			}
+		}
+	}
+
+	this.updateBBPosition(this.position);
+	return [position, blocked === null && yMountain !== null, o];
 };
 
 function futurePosAux(p, x, z, w, h, lx, lz)
@@ -52,8 +134,8 @@ function updateInstances(mesh, pos = new THREE.Vector3(0, 0, 0), rot = new THREE
 	const m = Scene.Map.current;
 	if (mesh.mapLoopPlugin_isClone || mesh === Core.Game.current.hero.mesh || mesh === m.mapProperties.skyboxMesh || isSpecialMesh(mesh))
 		return;
-	const x = Data.Systems.SQUARE_SIZE * m.mapProperties.length;
-	const z = Data.Systems.SQUARE_SIZE * m.mapProperties.width;
+	const x = m.mapProperties.length;
+	const z = m.mapProperties.width;
 	pos.add(mesh.position);
 	rot.set(rot.x + mesh.rotation.x, rot.y + mesh.rotation.y, rot.z + mesh.rotation.z, "XYZ");
 	scale.multiply(mesh.scale);
