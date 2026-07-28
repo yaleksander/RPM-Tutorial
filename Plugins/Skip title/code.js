@@ -1,7 +1,13 @@
 const pluginName = "Skip title";
 
 var currentGame = null;
-var settingsName = "Enable Settings on Systems tab!";
+var settings =
+{
+	name: function()
+	{
+		return "Enable Settings on Systems tab!";
+	}
+};
 
 class WaitSaveLoadAsync extends EventCommand.Base
 {
@@ -40,6 +46,11 @@ Scene.TitleScreen.prototype.load = async function ()
 	Manager.GL.screenTone.set(0, 0, 0, 1);
 	Manager.Stack.displayedPictures = [];
 	this.pictureBackground = await Core.Picture2D.loadImage();
+	Data.TitlescreenGameover.getTitleCommandsNames().forEach(command =>
+	{
+		if (command.datas.kind === Common.TITLE_COMMAND_KIND.SETTINGS)
+			settings = command.datas;
+	});
 	Model.TitleCommand.startNewGame();
 };
 
@@ -128,7 +139,6 @@ Manager.Plugins.registerCommand(pluginName, "Slot exists?", async (slot, variabl
 	Core.Game.current.variables.set(variable, -1);
 	var res = await Common.IO.fileExists(Common.Paths.SAVES + "/" + slot + ".json");
 	Core.Game.current.variables.set(variable, res);
-	console.log(res);
 	waitCommand.data.asyncSaveLoadFinished = true;
 });
 
@@ -160,7 +170,7 @@ Manager.Plugins.registerCommand(pluginName, "Open load menu", () =>
 Manager.Plugins.registerCommand(pluginName, "Open settings menu", () =>
 {
 	const waitCommand = addCustomWaitCommand(true);
-	Manager.Stack.push(new Scene.TitleSettings(settingsName));
+	Manager.Stack.push(new Scene.TitleSettings(settings));
 	waitCommand.data.beginCheck = true;
 });
 

@@ -29,7 +29,7 @@ var axesMenuList =
 function getKey(id)
 {
 	if (id >= 0 && id < keysList.length)
-		return keysList[id];
+		return "GPad." + keysList[id];
 	return "Error";
 }
 /*
@@ -62,8 +62,7 @@ setInterval(function ()
 				{
 					if (gp[i].buttons[j].pressed === true)
 					{
-						if (Common.Inputs.keysPressed.indexOf(getKey(j)) === -1)
-							Common.Inputs.keysPressed.push(getKey(j));
+						Common.Inputs.keysPressed.add(getKey(j));
 						if (buttonsList[i][j] === 0)
 						{
 							Manager.Stack.onKeyPressed(getKey(j));
@@ -76,8 +75,7 @@ setInterval(function ()
 					}
 					else
 					{
-						if (Common.Inputs.keysPressed.indexOf(getKey(j)) !== -1)
-							Common.Inputs.keysPressed.splice(getKey(j), 1);
+						Common.Inputs.keysPressed.delete(getKey(j));
 						if (buttonsList[i][j] > 0)
 							Manager.Stack.onKeyReleased(getKey(j));
 						buttonsList[i][j] = 0;
@@ -97,28 +95,28 @@ setInterval(function ()
 					{
 						const x = Model.DynamicValue.createNumber(lh);
 						const y = Model.DynamicValue.createNumber(lv);
-						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, [null, id, x, y], Core.Game.current.heroStates);
+						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
 						leftStickNeutral = false;
 					}
 					else
 					{
 						const x = Model.DynamicValue.createNumber(0);
 						const y = Model.DynamicValue.createNumber(0);
-						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, [null, id, x, y], Core.Game.current.heroStates);
+						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
 						leftStickNeutral = true;
 					}
 					if (Math.sqrt(rh * rh + rv * rv) > d)
 					{
 						const x = Model.DynamicValue.createNumber(rh);
 						const y = Model.DynamicValue.createNumber(rv);
-						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, [null, id, x, y], Core.Game.current.heroStates);
+						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
 						rightStickNeutral = false;
 					}
 					else
 					{
 						const x = Model.DynamicValue.createNumber(0);
 						const y = Model.DynamicValue.createNumber(0);
-						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, [null, id, x, y], Core.Game.current.heroStates);
+						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
 						rightStickNeutral = true;
 					}
 				}
@@ -161,7 +159,7 @@ setInterval(function ()
 				{
 					if (buttonsList[i][j] > 0)
 					{
-						Common.Inputs.keysPressed.splice(getKey(j), 1);
+						Common.Inputs.keysPressed.delete(getKey(j));
 						Manager.Stack.onKeyReleased(getKey(j));
 					}
 					buttonsList[i][j] = 0;
