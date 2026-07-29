@@ -2,8 +2,15 @@ const pluginName = "Gamepad";
 
 const leftStickEventID = Manager.Plugins.getParameter(pluginName, "Left stick event ID");
 const rightStickEventID = Manager.Plugins.getParameter(pluginName, "Right stick event ID");
-const deadzone = Manager.Plugins.getParameter(pluginName, "Deadzone variable ID");;
+const deadzone = Manager.Plugins.getParameter(pluginName, "Deadzone variable ID");
 const repeatDelay = 30;
+const prefix = "GPad.";
+const params = new Map(
+[
+	[1, Model.DynamicValue.createNumber(0)],
+	[2, Model.DynamicValue.createNumberDouble(0)],
+	[3, Model.DynamicValue.createNumberDouble(0)]
+]);
 
 var leftStickNeutral = true;
 var rightStickNeutral = true;
@@ -29,24 +36,10 @@ var axesMenuList =
 function getKey(id)
 {
 	if (id >= 0 && id < keysList.length)
-		return "GPad." + keysList[id];
+		return prefix + keysList[id];
 	return "Error";
 }
-/*
-const oldFunc = _getKeyPrefix;
-_getKeyPrefix = function (key)
-{
-	const str = oldFunc(key);
-	if (str.search(/\? \[ID=/) === 0)
-	{
-		const k = str.substring(6, str.indexOf("]"));
-		if (keysList.includes(k))
-			return "GPad." + k;
-	}
-	else
-		return str;
-}
-*/
+
 setInterval(function ()
 {
 	if (!Main.loaded || Manager.Stack.isLoading())
@@ -90,33 +83,33 @@ setInterval(function ()
 					if (Core.Game.current.getVariable(deadzone) === 0)
 						Core.Game.current.variables.set(deadzone, 0.15);
 					const d = Math.min(Math.max(Core.Game.current.getVariable(deadzone), 0.05), 0.95);
-					const id = Model.DynamicValue.createNumber(i + 1);
+					params.get(1).value = i + 1;
 					if (Math.sqrt(lh * lh + lv * lv) > d)
 					{
-						const x = Model.DynamicValue.createNumber(lh);
-						const y = Model.DynamicValue.createNumber(lv);
-						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
+						params.get(2).value = lh;
+						params.get(3).value = lv;
+						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, params, Core.Game.current.heroStates);
 						leftStickNeutral = false;
 					}
-					else
+					else if (!leftStickNeutral)
 					{
-						const x = Model.DynamicValue.createNumber(0);
-						const y = Model.DynamicValue.createNumber(0);
-						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
+						params.get(2).value = 0;
+						params.get(3).value = 0;
+						Core.Game.current.hero.receiveEvent(null, false, leftStickEventID, params, Core.Game.current.heroStates);
 						leftStickNeutral = true;
 					}
 					if (Math.sqrt(rh * rh + rv * rv) > d)
 					{
-						const x = Model.DynamicValue.createNumber(rh);
-						const y = Model.DynamicValue.createNumber(rv);
-						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
+						params.get(2).value = rh;
+						params.get(3).value = rv;
+						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, params, Core.Game.current.heroStates);
 						rightStickNeutral = false;
 					}
-					else
+					else if (!rightStickNeutral)
 					{
-						const x = Model.DynamicValue.createNumber(0);
-						const y = Model.DynamicValue.createNumber(0);
-						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, Common.Utils.arrayToMap([id, x, y]), Core.Game.current.heroStates);
+						params.get(2).value = 0;
+						params.get(3).value = 0;
+						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, params, Core.Game.current.heroStates);
 						rightStickNeutral = true;
 					}
 				}
@@ -171,6 +164,7 @@ setInterval(function ()
 
 window.addEventListener("gamepadconnected", (e) =>
 {
+	/*
 	const c = Data.Keyboards.controls;
 	const a = Object.getOwnPropertyNames(c);
 	for (var i = 0; i < a.length; i++)
@@ -216,4 +210,41 @@ window.addEventListener("gamepadconnected", (e) =>
 	for (var i = 0; i < a.length; i++)
 		Data.Settings.kb[c[a[i]].id] = c[a[i]].sc;
 	Data.Settings.write();
+	*/
+});
+
+function moveMapObj(id, dir, withCamera)
+{
+	if (Scene.Map.current.isBattleMap)
+		return;
+	Core.MapObject.search(id, (result) =>
+	{
+		if (!!result)
+		{
+			const cam = Scene.Map.current.camera;
+			const angle = cam.horizontalAngle;
+			const dist = Math.min(1, result.object.speed.getValue() * Core.MapObject.SPEED_NORMAL * Manager.Stack.averageElapsedTime);
+			result.object.move(Common.ORIENTATION.SOUTH, dist * Math.cos(dir * Math.PI / 180), 270 + (withCamera ? angle : -90), withCamera);
+			result.object.move(Common.ORIENTATION.SOUTH, dist * Math.sin(dir * Math.PI / 180), 180 + (withCamera ? angle : -90), withCamera);
+			if (!result.object.currentStateInstance.directionFix)
+			{
+				if (withCamera)
+					result.object.lookAt(Common.Mathf.mod(Math.round(180 - dir / 90) + Scene.Map.current.camera.getMapOrientation() - 3, 4));
+				else
+					result.object.lookAt(Common.Mathf.mod(Math.round(180 - dir / 90) - 1, 4));
+			}
+			Scene.Map.current.mapProperties.checkRandomBattle();
+		}
+	}, Core.ReactionInterpreter.currentObject);
+}
+
+Manager.Plugins.registerCommand(pluginName, "Move 1 step in angle", (id, dir, withCamera) =>
+{
+	moveMapObj(id, dir, withCamera);
+});
+
+Manager.Plugins.registerCommand(pluginName, "Move 1 step in direction", (id, x, y, withCamera) =>
+{
+	if (x != 0 || y != 0)
+		moveMapObj(id, Math.atan2(-y, x) * 180 / Math.PI, withCamera);
 });

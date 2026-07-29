@@ -7,8 +7,8 @@ Core.MapObject.prototype.getFuturPosition = function(orientation, distance, angl
 {
 	const w = Scene.Map.current.mapProperties.length;
 	const h = Scene.Map.current.mapProperties.width;
-	const dx = distance * Math.cos((angle + this.orientation * 90.0) * Math.PI / 180.0);
-	const dz = distance * Math.sin((angle + this.orientation * 90.0) * Math.PI / 180.0);
+	const dx = distance * Math.cos((angle + 90 * orientation) * Math.PI / 180.0);
+	const dz = distance * Math.sin((angle + 90 * orientation) * Math.PI / 180.0);
 	var position = new THREE.Vector3(this.previousPosition.x - dx, this.previousPosition.y, this.previousPosition.z - dz);
 	var halfBBX = 0;
 	var halfBBZ = 0;
@@ -90,28 +90,6 @@ Core.MapObject.prototype.getFuturPosition = function(orientation, distance, angl
 	this.updateBBPosition(this.position);
 	return [position, blocked === null && yMountain !== null, o];
 };
-
-function futurePosAux(p, x, z, w, h, lx, lz)
-{
-	if (lx)
-	{
-		if (x < 0)
-			x += w;
-		else if (x >= w)
-			x -= w;
-	}
-	if (x >= 0 && x < w)
-		p.setX(x);
-	if (lz)
-	{
-		if (z < 0)
-			z += h;
-		else if (z >= h)
-			z -= h;
-	}
-	if (z >= 0 && z < h)
-		p.setZ(z);
-}
 
 function isSpecialMesh(mesh)
 {
