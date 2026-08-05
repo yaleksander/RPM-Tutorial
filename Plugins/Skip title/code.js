@@ -68,7 +68,6 @@ Scene.LoadGame.prototype.cancel = function (isKey, options = {})
 function addCustomWaitCommand(alt = false)
 {
 	const c = Core.ReactionInterpreter.currentReaction.currentCommand;
-	console.log(c);
 	if (!c.hasCustomWaitCommand)
 	{
 		c.hasCustomWaitCommand = true;

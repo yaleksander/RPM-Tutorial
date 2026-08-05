@@ -5,6 +5,7 @@ const rightStickEventID = Manager.Plugins.getParameter(pluginName, "Right stick 
 const deadzone = Manager.Plugins.getParameter(pluginName, "Deadzone variable ID");
 const repeatDelay = 30;
 const prefix = "GPad.";
+const keysNames = ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Back", "Start", "L3", "R3", "Up", "Down", "Left", "Right", "Home", "L.Axis.Up", "L.Axis.Down", "L.Axis.Left", "L.Axis.Right", "R.Axis.Up", "R.Axis.Down", "R.Axis.Left", "R.Axis.Right"];
 const params = new Map(
 [
 	[1, Model.DynamicValue.createNumber(0)],
@@ -14,7 +15,6 @@ const params = new Map(
 
 var leftStickNeutral = true;
 var rightStickNeutral = true;
-var keysList = ["A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Back", "Start", "L3", "R3", "Up", "Down", "Left", "Right", "Home"];
 
 // https://w3c.github.io/gamepad/#remapping
 var buttonsList =
@@ -22,10 +22,18 @@ var buttonsList =
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+	[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0],
+	[0, 0, 0, 0]
 ];
 
-var axesMenuList =
+var axesList =
 [
 	[0, 0, 0, 0],
 	[0, 0, 0, 0],
@@ -33,11 +41,64 @@ var axesMenuList =
 	[0, 0, 0, 0]
 ];
 
-function getKey(id)
+class WaitAsyncOperation extends EventCommand.Base
 {
-	if (id >= 0 && id < keysList.length)
-		return prefix + keysList[id];
-	return "Error";
+	constructor()
+	{
+		super();
+		this.asyncFinished = false;
+	}
+
+	update(currentState)
+	{
+		return this.asyncFinished;
+	}
+}
+
+function addCustomWaitCommand()
+{
+	const c = Core.ReactionInterpreter.currentReaction.currentCommand;
+	if (!c.hasCustomWaitCommand)
+	{
+		c.hasCustomWaitCommand = true;
+		const n = c.next;
+		c.next = new Core.Node(c.parent, new WaitAsyncOperation());
+		c.next.next = n;
+	}
+	else
+		c.next.data.asyncFinished = false;
+	return c.next;
+}
+
+function getKey(id, k = 0)
+{
+	if (id >= 0 && id < keysNames.length)
+		return prefix + keysNames[id + 4 * k];
+	return "Unknown";
+}
+
+function sendButton(i, j, isPressed, name)
+{
+	if (isPressed)
+	{
+		Common.Inputs.keysPressed.add(name);
+		if (buttonsList[i][j] === 0)
+		{
+			Manager.Stack.onKeyPressed(name);
+			if (!Manager.Stack.isLoading())
+				Manager.Stack.onKeyPressedAndRepeat(name);
+		}
+		buttonsList[i][j] = Math.min(buttonsList[i][j] + 1, repeatDelay);
+		if (!Manager.Stack.isLoading() && buttonsList[i][j] === repeatDelay)
+			Manager.Stack.onKeyPressedAndRepeat(name);
+	}
+	else
+	{
+		Common.Inputs.keysPressed.delete(name);
+		if (buttonsList[i][j] > 0)
+			Manager.Stack.onKeyReleased(name);
+		buttonsList[i][j] = 0;
+	}
 }
 
 setInterval(function ()
@@ -52,28 +113,7 @@ setInterval(function ()
 			if (!!gp[i])
 			{
 				for (var j = 0; j < gp[i].buttons.length; j++)
-				{
-					if (gp[i].buttons[j].pressed === true)
-					{
-						Common.Inputs.keysPressed.add(getKey(j));
-						if (buttonsList[i][j] === 0)
-						{
-							Manager.Stack.onKeyPressed(getKey(j));
-							if (!Manager.Stack.isLoading())
-								Manager.Stack.onKeyPressedAndRepeat(getKey(j));
-						}
-						buttonsList[i][j] = Math.min(buttonsList[i][j] + 1, repeatDelay);
-						if (!Manager.Stack.isLoading() && buttonsList[i][j] === repeatDelay)
-							Manager.Stack.onKeyPressedAndRepeat(getKey(j));
-					}
-					else
-					{
-						Common.Inputs.keysPressed.delete(getKey(j));
-						if (buttonsList[i][j] > 0)
-							Manager.Stack.onKeyReleased(getKey(j));
-						buttonsList[i][j] = 0;
-					}
-				}
+					sendButton(i, j, gp[i].buttons[j].pressed === true, getKey(j));
 				const lh = gp[i].axes[0];
 				const lv = gp[i].axes[1];
 				const rh = gp[i].axes[2];
@@ -112,50 +152,30 @@ setInterval(function ()
 						Core.Game.current.hero.receiveEvent(null, false, rightStickEventID, params, Core.Game.current.heroStates);
 						rightStickNeutral = true;
 					}
+					
 				}
-				if (lv < -0.5 || rv < -0.5)
-				{
-					axesMenuList[i][0] = Math.min(axesMenuList[i][0] + 1, repeatDelay);
-					if (axesMenuList[i][0] === 1 || axesMenuList[i][0] === repeatDelay)
-						Manager.Stack.onKeyPressedAndRepeat("Up");
-				}
-				else
-					axesMenuList[i][0] = 0;
-				if (lv > 0.5 || rv > 0.5)
-				{
-					axesMenuList[i][1] = Math.min(axesMenuList[i][1] + 1, repeatDelay);
-					if (axesMenuList[i][1] === 1 || axesMenuList[i][1] === repeatDelay)
-						Manager.Stack.onKeyPressedAndRepeat("Down");
-				}
-				else
-					axesMenuList[i][1] = 0;
-				if (lh < -0.5 || rh < -0.5)
-				{
-					axesMenuList[i][2] = Math.min(axesMenuList[i][2] + 1, repeatDelay);
-					if (axesMenuList[i][2] === 1 || axesMenuList[i][2] === repeatDelay)
-						Manager.Stack.onKeyPressedAndRepeat("Left");
-				}
-				else
-					axesMenuList[i][2] = 0;
-				if (lh > 0.5 || rh > 0.5)
-				{
-					axesMenuList[i][3] = Math.min(axesMenuList[i][3] + 1, repeatDelay);
-					if (axesMenuList[i][3] === 1 || axesMenuList[i][3] === repeatDelay)
-						Manager.Stack.onKeyPressedAndRepeat("Right");
-				}
-				else
-					axesMenuList[i][3] = 0;
+				sendButton(i + 4, 0, lv < -0.5, getKey(0, 1));
+				sendButton(i + 4, 1, lv >  0.5, getKey(1, 1));
+				sendButton(i + 4, 2, lh < -0.5, getKey(2, 1));
+				sendButton(i + 4, 3, lh >  0.5, getKey(3, 1));
+				sendButton(i + 8, 0, rv < -0.5, getKey(0, 2));
+				sendButton(i + 8, 1, rv >  0.5, getKey(1, 2));
+				sendButton(i + 8, 2, rh < -0.5, getKey(2, 2));
+				sendButton(i + 8, 3, rh >  0.5, getKey(3, 2));
 			}
 			else
 			{
-				for (var j = 0; j < buttonsList[i].length; j++)
+				for (var k = 0; k < 3; k++)
 				{
-					if (buttonsList[i][j] > 0)
+					for (var j = 0; j < buttonsList[i + 4 * k].length; j++)
 					{
-						Common.Inputs.keysPressed.delete(getKey(j));
-						Manager.Stack.onKeyReleased(getKey(j));
+						if (buttonsList[i + 4 * k][j] > 0)
+						{
+							Common.Inputs.keysPressed.delete(getKey(j, k));
+							Manager.Stack.onKeyReleased(getKey(j, k));
+						}
+						buttonsList[i + 4 * k][j] = 0;
 					}
-					buttonsList[i][j] = 0;
 				}
 			}
 		}
@@ -164,53 +184,7 @@ setInterval(function ()
 
 window.addEventListener("gamepadconnected", (e) =>
 {
-	/*
-	const c = Data.Keyboards.controls;
-	const a = Object.getOwnPropertyNames(c);
-	for (var i = 0; i < a.length; i++)
-		for (var j = 0; j < c[a[i]].sc.length; j++)
-			for (var k = 0; k < c[a[i]].sc[j].length; k++)
-				if (typeof c[a[i]].sc[j][k] === "string")
-					return;
-	if (Data.Keyboards.controls["Action"])
-		Data.Keyboards.controls["Action"].sc.push(["A"]);
-	if (Data.Keyboards.controls["Cancel"])
-		Data.Keyboards.controls["Cancel"].sc.push(["B"]);
-	if (Data.Keyboards.controls["MainMenu"])
-	{
-		Data.Keyboards.controls["MainMenu"].sc.push(["B"]);
-		Data.Keyboards.controls["MainMenu"].sc.push(["Start"]);
-	}
-	if (Data.Keyboards.controls["LeftCamera"])
-	{
-		Data.Keyboards.controls["LeftCamera"].sc.push(["RB"]);
-		Data.Keyboards.controls["LeftCamera"].sc.push(["RT"]);
-	}
-	if (Data.Keyboards.controls["RightCamera"])
-	{
-		Data.Keyboards.controls["RightCamera"].sc.push(["LB"]);
-		Data.Keyboards.controls["RightCamera"].sc.push(["LT"]);
-	}
-	if (Data.Keyboards.controls["UpMenu"])
-		Data.Keyboards.controls["UpMenu"].sc.push(["Up"]);
-	if (Data.Keyboards.controls["UpHero"])
-		Data.Keyboards.controls["UpHero"].sc.push(["Up"]);
-	if (Data.Keyboards.controls["DownMenu"])
-		Data.Keyboards.controls["DownMenu"].sc.push(["Down"]);
-	if (Data.Keyboards.controls["DownHero"])
-		Data.Keyboards.controls["DownHero"].sc.push(["Down"]);
-	if (Data.Keyboards.controls["LeftMenu"])
-		Data.Keyboards.controls["LeftMenu"].sc.push(["Left"]);
-	if (Data.Keyboards.controls["LeftHero"])
-		Data.Keyboards.controls["LeftHero"].sc.push(["Left"]);
-	if (Data.Keyboards.controls["RightMenu"])
-		Data.Keyboards.controls["RightMenu"].sc.push(["Right"]);
-	if (Data.Keyboards.controls["RightHero"])
-		Data.Keyboards.controls["RightHero"].sc.push(["Right"]);
-	for (var i = 0; i < a.length; i++)
-		Data.Settings.kb[c[a[i]].id] = c[a[i]].sc;
-	Data.Settings.write();
-	*/
+	
 });
 
 function moveMapObj(id, dir, withCamera)
@@ -237,6 +211,45 @@ function moveMapObj(id, dir, withCamera)
 		}
 	}, Core.ReactionInterpreter.currentObject);
 }
+
+Manager.Plugins.registerCommand(pluginName, "Remove all gamepad assignments", async () =>
+{
+	const waitCommand = addCustomWaitCommand();
+	Data.Settings.kb.forEach((sc, key, map) =>
+	{
+		for (var i = 0; i < sc.length; i++)
+		{
+			for (var j = 0; j < sc[i].length; j++)
+			{
+				if (sc[i][j].indexOf(prefix) === 0)
+				{
+					sc.splice(i--, 1);
+					break;
+				}
+			}
+		}
+		if (sc.length === 0)
+			map.delete(key);
+	});
+	await Data.Settings.save();
+	waitCommand.data.asyncFinished = true;
+});
+
+Manager.Plugins.registerCommand(pluginName, "Add gamepad assignment", async (actionID, key) =>
+{
+	const waitCommand = addCustomWaitCommand();
+	Data.Keyboards.get(actionID).sc.push([prefix + key]);
+	await Data.Settings.save();
+	waitCommand.data.asyncFinished = true;
+});
+
+Manager.Plugins.registerCommand(pluginName, "Remove ALL custom assignments", async () =>
+{
+	const waitCommand = addCustomWaitCommand();
+	Data.Settings.kb.clear()
+	await Data.Settings.save();
+	waitCommand.data.asyncFinished = true;
+});
 
 Manager.Plugins.registerCommand(pluginName, "Move 1 step in angle", (id, dir, withCamera) =>
 {
