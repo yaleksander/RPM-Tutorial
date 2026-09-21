@@ -583,8 +583,8 @@ Manager.Plugins.registerCommand(pluginName, "Create water surface", (variable, x
 
 Manager.Plugins.registerCommand(pluginName, "Move water surface", (variable, y) =>
 {
-	if (waterList.includes(Core.Game.current.getVariable(variable)))
-		Core.Game.current.variables.set(Core.Game.current.getVariable(variable).position.y = y * Data.Systems.SQUARE_SIZE);
+	if (waterList.includes(Core.Game.current.variables.get(variable)))
+		Core.Game.current.variables.set(Core.Game.current.variables.get(variable).position.y = y * Data.Systems.SQUARE_SIZE);
 });
 
 Manager.Plugins.registerCommand(pluginName, "Initialize sky", () =>

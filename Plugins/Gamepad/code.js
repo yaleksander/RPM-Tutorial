@@ -120,9 +120,9 @@ setInterval(function ()
 				const rv = gp[i].axes[3];
 				if (Manager.Stack.top instanceof Scene.Map && !Scene.Map.current.loading && !Core.ReactionInterpreter.blockingHero)
 				{
-					if (Core.Game.current.getVariable(deadzone) === 0)
+					if (Core.Game.current.variables.get(deadzone) === 0)
 						Core.Game.current.variables.set(deadzone, 0.15);
-					const d = Math.min(Math.max(Core.Game.current.getVariable(deadzone), 0.05), 0.95);
+					const d = Math.min(Math.max(Core.Game.current.variables.get(deadzone), 0.05), 0.95);
 					params.get(1).value = i + 1;
 					if (Math.sqrt(lh * lh + lv * lv) > d)
 					{
@@ -207,7 +207,8 @@ function moveMapObj(id, dir, withCamera)
 				else
 					result.object.lookAt(Common.Mathf.mod(Math.round(180 - dir / 90) - 1, 4));
 			}
-			Scene.Map.current.mapProperties.checkRandomBattle();
+			if (result.object == Scene.Map.current.hero)
+				Scene.Map.current.mapProperties.checkRandomBattle();
 		}
 	}, Core.ReactionInterpreter.currentObject);
 }

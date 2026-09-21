@@ -196,7 +196,7 @@ class DisplayChoiceCustom extends EventCommand.DisplayChoice
 	update(currentState)
 	{
 		this.windowChoices.update();
-		return Core.Game.current.getVariable(this.resultVariableID) !== null;
+		return Core.Game.current.variables.get(this.resultVariableID) !== null;
 	}
 }
 

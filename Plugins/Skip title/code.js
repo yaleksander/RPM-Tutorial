@@ -148,11 +148,28 @@ Manager.Plugins.registerCommand(pluginName, "Get slot variable", async (slot, va
 	try
 	{
 		await game.load();
-		Core.Game.current.variables.set(result, game.getVariable(variable));
+		Core.Game.current.variables.set(result, game.variables.get(variable));
 	}
 	catch (e)
 	{
 		Core.Game.current.variables.set(result, e);
+	}
+	waitCommand.data.asyncSaveLoadFinished = true;
+});
+
+Manager.Plugins.registerCommand(pluginName, "Copy variables", async (slot, list) =>
+{
+	const waitCommand = addCustomWaitCommand();
+	const game = new Core.Game(slot);
+	try
+	{
+		await game.load();
+		for (var i = 0; i < list.list.length; i++)
+			Core.Game.current.variables.set(list.list[i].value.v, game.variables.get(list.list[i].value.v));
+	}
+	catch (e)
+	{
+		console.error(e);
 	}
 	waitCommand.data.asyncSaveLoadFinished = true;
 });

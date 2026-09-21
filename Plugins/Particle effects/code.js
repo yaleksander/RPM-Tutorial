@@ -414,7 +414,7 @@ function evaluate(expr, t, r)
 		case Token.TAN:   return Math.tan(left);
 		case Token.ABS:   return Math.abs(left);
 		case Token.ROUND: return Math.round(left);
-		case Token.VAR:   return Core.Game.current.getVariable(Math.round(left));
+		case Token.VAR:   return Core.Game.current.variables.get(Math.round(left));
 		case Token.MIN:   return Math.min(...left);
 		case Token.MAX:   return Math.max(...left);
 		case Token.COMMA: return [left].concat([evaluate(expr.right, t, r)]);
