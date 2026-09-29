@@ -37,8 +37,13 @@ class WaitUntilDoneTyping extends EventCommand.Base
             return 0;
         const p = Manager.Stack.displayedPictures;
         for (var i = 0; i < p.length; i++)
+		{
             if (p[i][0] === this.id && !!p[i][1].typewriterTextPlugin_doneTyping)
+			{
+	            p.splice(i, 1);
                 return 1;
+			}
+		}
         return 0;
     }
 }
@@ -85,76 +90,6 @@ function isText(text)
     return false;
 }
 
-function updateWindow(id, x, y, width, height, wholeText, count, sound, volume, time)
-{
-    var w = null;
-    const p = Manager.Stack.displayedPictures;
-    for (var i = 0; i < p.length; i++)
-        if (p[i][0] === id)
-            w = p[i][1];
-    if (count < wholeText.length)
-    {
-        var stride = 1;
-        var wait = 5;
-        if (!!w && w.typewriterTextPlugin_skip)
-            stride = wholeText.length;
-        if (Core.Game.current.playTime.time > time + 20)
-        {
-            time = Core.Game.current.playTime.time;
-            Manager.Songs.playSound(sound, volume * 0.2);
-        }
-        for (var i = stride; i > 0; i--)
-        {
-            if (wholeText[count] == "[")
-            {
-                const n = wholeText.indexOf("]", count);
-                if (wholeText.substr(count).search(/\[wait=\d*\]/) === 0)
-                {
-                    wait = parseInt(wholeText.slice(count + 6, n));
-                    wholeText = wholeText.substr(0, count) + wholeText.substr(n + 1);
-                    break;
-                }
-                if (n > 0)
-                    count = n;
-            }
-            count++;
-        }
-        spawnWindow(id, x, y, height, width, fixTextAllExpr(wholeText.substr(0, count)));
-        setTimeout(updateWindow, wait, id, x, y, width, height, wholeText, count, sound, volume, time);
-    }
-    else
-        w.typewriterTextPlugin_doneTyping = true;
-}
-
-Manager.Plugins.registerCommand(pluginName, "Show Text", (id, text, sound, volume) =>
-{
-    var i;
-    text = text.toString();
-    while (true) // not the best practice but works in this scenario
-    {
-        i = text.search(/[^\\]\\n/); // regex for "find \n except when it's \\n"
-        if (i === -1)
-            break;
-        text = text.slice(0, i + 1) + "\n" + text.slice(i + 3);
-    }
-    const params = [8, "", -1, 0, 0];
-    for (var j = 0; j < Data.Languages.listIDs.length; j++)
-        params.push(j + 1, text.replace(/\[wait=\d*\]/g, "").replace("\\n", "\n"));
-    const d = Data.Systems.dbOptions;
-    updateWindow(id, d.v_x, d.v_y, d.v_h, d.v_w, text.replace("\\\\n", "\\n"), 0, sound.kind === Common.SONG_KIND.SOUND ? sound.id : 0, Math.max(0, Math.min(100, volume / 100)), Core.Game.current.playTime.time);
-    const currentCommand = Core.ReactionInterpreter.currentReaction.currentCommand;
-    if (!currentCommand.typewriterTextPlugin_finishedText)
-    {
-        currentCommand.typewriterTextPlugin_finishedText = true;
-        const nextCommand = currentCommand.next;
-        const showText = new EventCommand.ShowText(params);
-        showText.initialize();
-        currentCommand.next = new Core.Node(currentCommand.parent, new WaitUntilDoneTyping(id));
-        currentCommand.next.next = new Core.Node(currentCommand.parent, showText);
-        currentCommand.next.next.next = nextCommand;
-    }
-});
-
 function spawnWindow(id, x, y, width, height, text)
 {
     const pad = Data.Systems.dbOptions;
@@ -185,3 +120,73 @@ function spawnWindow(id, x, y, width, height, text)
     if (!ok)
         p.push(value);
 };
+
+function updateWindow(id, x, y, width, height, wholeText, count, sound, volume, time, interval)
+{
+    var w = null;
+    const p = Manager.Stack.displayedPictures;
+    for (var i = 0; i < p.length; i++)
+        if (p[i][0] === id)
+            w = p[i][1];
+    if (count < wholeText.length)
+    {
+        var stride = 1;
+        var wait = interval;
+        if (!!w && w.typewriterTextPlugin_skip)
+            stride = wholeText.length;
+        if (Core.Game.current.playTime.time > time + 20)
+        {
+            time = Core.Game.current.playTime.time;
+            Manager.Songs.playSound(sound, volume * 0.2);
+        }
+        for (var i = stride; i > 0; i--)
+        {
+            if (wholeText[count] == "[")
+            {
+                const n = wholeText.indexOf("]", count);
+                if (wholeText.substr(count).search(/\[wait=\d*\]/) === 0)
+                {
+                    wait = parseInt(wholeText.slice(count + 6, n));
+                    wholeText = wholeText.substr(0, count) + wholeText.substr(n + 1);
+                    break;
+                }
+                if (n > 0)
+                    count = n;
+            }
+            count++;
+        }
+        spawnWindow(id, x, y, height, width, fixTextAllExpr(wholeText.substr(0, count)));
+        setTimeout(updateWindow, wait, id, x, y, width, height, wholeText, count, sound, volume, time, interval);
+    }
+    else
+        w.typewriterTextPlugin_doneTyping = true;
+}
+
+Manager.Plugins.registerCommand(pluginName, "Show Text", (id, text, sound, volume, interval) =>
+{
+    var i;
+    text = text.toString();
+    while (true) // not the best practice but works in this scenario
+    {
+        i = text.search(/[^\\]\\n/); // regex for "find \n except when it's \\n"
+        if (i === -1)
+            break;
+        text = text.slice(0, i + 1) + "\n" + text.slice(i + 3);
+    }
+    const params = [8, "", -1, 0, 0];
+    for (var j = 0; j < Data.Languages.listIDs.length; j++)
+        params.push(j + 1, text.replace(/\[wait=\d*\]/g, "").replace("\\n", "\n"));
+    const d = Data.Systems.dbOptions;
+    updateWindow(id, d.v_x, d.v_y, d.v_h, d.v_w, text.replace("\\\\n", "\\n"), 0, sound.kind === Common.SONG_KIND.SOUND ? sound.id : 0, Math.max(0, Math.min(100, volume / 100.0)), Core.Game.current.playTime.time, interval);
+    const currentCommand = Core.ReactionInterpreter.currentReaction.currentCommand;
+    if (!currentCommand.typewriterTextPlugin_finishedText)
+    {
+        currentCommand.typewriterTextPlugin_finishedText = true;
+        const nextCommand = currentCommand.next;
+        const showText = new EventCommand.ShowText(params);
+        showText.initialize();
+        currentCommand.next = new Core.Node(currentCommand.parent, new WaitUntilDoneTyping(id));
+        currentCommand.next.next = new Core.Node(currentCommand.parent, showText);
+        currentCommand.next.next.next = nextCommand;
+    }
+});

@@ -203,7 +203,6 @@ function update()
 				v.applyAxisAngle(up, Scene.Map.current.camera.horizontalAngle * Math.PI / 180);
 				track.stereo(track.isStereo ? v.z * y : 0);
 				track.volume(track.volMult * (1 - y));
-				console.log(track.volume());
 				if (track.wallBlock > 0)
 				{
 					raycaster.set(track.anchored.position, hero);

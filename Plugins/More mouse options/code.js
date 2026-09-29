@@ -44,7 +44,7 @@ function raycast(dist, ignore = false)
 	for (var i = 0; i < intersects.length; i++)
 	{
 		if (intersects[i].distance < dist)
-			intersects.splice(i);
+			intersects.splice(i--, 1);
 		else
 		{
 			if (intersects[i].object.material.wireframe || !!intersects[i].object.material.length || (ignore && intersects[i].object === Core.Game.current.hero.mesh) || !intersects[i].object.material.map || !intersects[i].object.material.map.source || !intersects[i].object.material.map.source.data)
@@ -60,7 +60,7 @@ function raycast(dist, ignore = false)
 				const x = parseInt(intersects[i].uv.x * img.width);
 				const y = parseInt(intersects[i].uv.y * img.height);
 				if (data[(x + y * img.width) * 4 + 3] == 0)
-					intersects.splice(i--);
+					intersects.splice(i--, 1);
 			}
 		}
 	}
@@ -133,7 +133,8 @@ Manager.Plugins.registerCommand(pluginName, "Get object under cursor", (variable
 		const cx =  (Common.ScreenResolution.getScreenXReverse(x) / Common.ScreenResolution.SCREEN_X) * 2 - 1;
 		const cy = -(Common.ScreenResolution.getScreenYReverse(y) / Common.ScreenResolution.SCREEN_Y) * 2 + 1;
 		raycaster.setFromCamera(new THREE.Vector2(cx, cy), Scene.Map.current.camera.getThreeCamera());
-		Core.Game.current.variables.set(variableID, getMapObject(raycast(-1, ignoreHero)[0].object));
+		const intersects = raycast(-1, ignoreHero);
+		Core.Game.current.variables.set(variableID, intersects.length > 0 ? getMapObject(intersects[0].object) : -1);
 	}
 });
 
