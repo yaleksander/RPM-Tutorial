@@ -1,4 +1,4 @@
-const pluginName = "Multiple text boxes";
+const pluginName = "More window options";
 
 var lastX = 0;
 var lastY = 0;
@@ -23,7 +23,7 @@ class DisplayChoiceCustom extends EventCommand.DisplayChoice
 		this.graphics = new Array(this.choices.length);
 		for (let i = 0; i < this.choices.length; i++)
 		{
-			this.graphics[i] = new Graphic.Text(this.choices[i], { align: Common.ALIGN.CENTER });
+			this.graphics[i] = new Graphic.Text(this.choices[i].value, { align: Common.ALIGN.CENTER });
 			this.maxWidth = Math.max(this.maxWidth, this.graphics[i].textWidth);
 		}
 	}
@@ -183,15 +183,12 @@ Manager.Plugins.registerCommand(pluginName, "Get window under cursor", (variable
 
 Manager.Plugins.registerCommand(pluginName, "Display choices", (choices, x, y, width, height, spacing, selected, cancel, result, disableCancel) =>
 {
-	const arr = [];
-	for (var i = 0; i < choices.list.length; i++)
-		arr.push(choices.list[i].value.v);
 	const c = Core.ReactionInterpreter.currentReaction.currentCommand;
 	if (!c.hasDisplayChoiceCustomCommand)
 	{
 		c.hasDisplayChoiceCustomCommand = true;
 		const n = c.next;
-		c.next = new Core.Node(c.parent, new DisplayChoiceCustom([arr, x, y, width, height, spacing, selected, cancel, result, disableCancel]));
+		c.next = new Core.Node(c.parent, new DisplayChoiceCustom([choices, x, y, width, height, spacing, selected, cancel, result, disableCancel]));
 		c.next.next = n;
 	}
 });
