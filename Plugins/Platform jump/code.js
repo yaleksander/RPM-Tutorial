@@ -1,4 +1,4 @@
-const pluginName = "True jump";
+const pluginName = "Platform jump";
 
 const gravity = Manager.Plugins.getParameter(pluginName, "Gravity") / 1000;
 

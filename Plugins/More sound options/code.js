@@ -176,8 +176,8 @@ setInterval(function()
 			{
 				for ([key, value] of portion.staticMountainsList)
 					if (value != null)
-						mountains.push(value);
-				for ([key, value] of portion.staticWallsList)
+						mountains.push(value.mesh);
+				for (value of portion.staticWallsList)
 					if (value != null)
 						walls.push(value);
 			}
@@ -185,35 +185,54 @@ setInterval(function()
 	}
 }, 500);
 
-function update()
+setInterval(function()
 {
 	if (Manager.Stack.top instanceof Scene.Map && !Scene.Map.current.loading)
 	{
-		const hero = Core.Game.current.hero.position;
+		const hero = Core.Game.current.hero.position.clone();
 		for (track of audioList)
 		{
 			if (!!track && !!track.anchored)
 			{
+				const pos = track.anchored.position.clone();
+				if (Scene.Map.current.mapLoopPlugin_loopX)
+				{
+					const l = Scene.Map.current.mapProperties.length;
+					if (Math.abs(pos.x - l - hero.x) < Math.abs(pos.x - hero.x))
+						pos.setX(pos.x - l);
+					else if (Math.abs(pos.x + l - hero.x) < Math.abs(pos.x - hero.x))
+						pos.setX(pos.x + l);
+				}
+				if (Scene.Map.current.mapLoopPlugin_loopZ)
+				{
+					const w = Scene.Map.current.mapProperties.width;
+					if (Math.abs(pos.z - w - hero.z) < Math.abs(pos.z - hero.z))
+						pos.setZ(pos.z - w);
+					else if (Math.abs(pos.z + w - hero.z) < Math.abs(pos.z - hero.z))
+						pos.setZ(pos.z + w);
+				}
+				const dist = pos.distanceTo(hero);
 				const max = track.maxDist;
 				const min = track.minDist;
 				const wall = track.wallBlock;
-				const x = Math.min(1, Math.max(0, (track.anchored.position.distanceTo(hero) - min) / (max - min)));
+				const x = Math.min(1, Math.max(0, (dist - min) / (max - min)));
 				const y = track.exp ? 1 + Math.pow(x - 1, 3) : x;
-				const v = track.anchored.position.clone().sub(hero).normalize();
-				v.applyAxisAngle(up, Scene.Map.current.camera.horizontalAngle * Math.PI / 180);
+				const dir = pos.clone().sub(hero).normalize();
+				const v = dir.clone().applyAxisAngle(up, Scene.Map.current.camera.horizontalAngle * Math.PI / 180);
 				track.stereo(track.isStereo ? v.z * y : 0);
 				track.volume(track.volMult * (1 - y));
 				if (track.wallBlock > 0)
 				{
-					raycaster.set(track.anchored.position, hero);
-					const intM = raycaster.intersectObjects(mountains);
-					const intW = raycaster.intersectObjects(walls);
-					track.volume(track.volume() * (1.0 - Math.max(0, (intM.length * 0.5 + intW.length) * track.wallBlock)));
+					raycaster.set(hero, dir);
+					const mi = raycaster.intersectObjects(mountains);
+					while (mi.length > 0 && mi[mi.length - 1].distance > dist)
+						mi.pop();
+					const wi = raycaster.intersectObjects(walls);
+					while (wi.length > 0 && wi[wi.length - 1].distance > dist)
+						wi.pop();
+					track.volume(track.volume() * (1.0 - Math.max(0, (mi.length + wi.length) * track.wallBlock)));
 				}
 			}
 		}
 	}
-	setTimeout(update, 100);
-}
-
-update();
+}, 100);
