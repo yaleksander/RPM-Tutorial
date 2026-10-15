@@ -44,14 +44,12 @@ class DisplayChoiceCustom extends EventCommand.DisplayChoice
 			Data.Systems.soundConfirmation.playSound();
 			currentState.index = this.windowChoices.currentSelectedIndex;
 			Core.Game.current.variables.set(this.resultVariableID, currentState.index);
-			console.log(currentState.index);
 		}
 		else if (Scene.MenuBase.checkCancel(isKey, options) && !this.disableCancel)
 		{
 			Data.Systems.soundCancel.playSound();
 			currentState.index = this.cancelAutoIndex.getValue();
 			Core.Game.current.variables.set(this.resultVariableID, currentState.index);
-			console.log(currentState.index);
 		}
 	}
 
