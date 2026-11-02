@@ -1,188 +1,230 @@
 const pluginName = "Platform jump";
 
 const gravity = Manager.Plugins.getParameter(pluginName, "Gravity") / 1000;
-
+const raycaster = new THREE.Raycaster();
 const up = new THREE.Vector3(0, 1, 0);
 const down = new THREE.Vector3(0, -1, 0);
 const timeout = 10;
 
-function checkCollisions(obj, v0, pos)
+function raycastFloors(mapPortion, position, direction, length)
 {
-	const raycaster = new THREE.Raycaster();
-	var intersect = null;
+	raycaster.set(position, direction);
+	raycaster.far = length;
+	const arr = [];
+	if (!!mapPortion.staticFloorsMesh)
+		arr.push(mapPortion.staticFloorsMesh);
+	for ([key, value] of mapPortion.staticMountainsList)
+		arr.push(value.mesh);
+	if (arr.length == 0)
+		return null;
+	const intersect = raycaster.intersectObjects(arr);
+	if (intersect.length > 0)
+		return position.setY(intersect[0].point.y);
+	return null;
+}
 
-	// get bounding boxes and meshes from map portion
-	obj.updateBBPosition(pos);
-	const m = Scene.Map.current;
-	const p = Core.Position.createFromVector3(pos);
-	const mp = m.getMapPortionByPosition(p);
-	if (!mp)
-		return true;
-	const b = obj.boundingBoxSettings.b;
-	const dir = v0.clone().normalize();
-	const obstacles = [];
-	if (!!mp.staticFloorsMesh)
-		obstacles.push(mp.staticFloorsMesh);
-	for (var i = 0; i < mp.staticAutotilesList.length; i++)
-		if (!!mp.staticAutotilesList[i] && !!mp.staticAutotilesList[i][0].mesh)
-			obstacles.push(mp.staticAutotilesList[i][0].mesh);
-	for (var i = 0; i < mp.staticMountainsList.length; i++)
-		if (!!mp.staticMountainsList[i].mesh)
-			obstacles.push(mp.staticMountainsList[i].mesh);
-	for (var i = 0; i < mp.staticWallsList.length; i++)
-		obstacles.push(mp.staticWallsList[i]);
-	for (var i = 0; i < mp.staticObjects3DList.length; i++)
-		obstacles.push(mp.staticObjects3DList[i]);
-
-	var result = Manager.Collisions.checkObjectsRay(pos, obj);
-	if (!!result && result[0])
-		return true;
-	for (var i = 0; i < obj.meshBoundingBox.length; i++)
+function getFuturePosition(object, positionBefore, positionAfter)
+{
+	const mp = Scene.Map.current.mapProperties;
+	positionAfter.setY(Math.min(Math.max(positionAfter.y, -mp.depth), mp.height));
+	object.updateBBPosition(positionAfter);
+	if (Manager.Collisions.checkObjectsRay(positionAfter, object))
+		return positionBefore;
+	const direction = Manager.Collisions._scratchDirection.subVectors(positionAfter, positionBefore);
+	const len = direction.length();
+	direction.normalize();
+	const px = 1.0 / Data.Systems.SQUARE_SIZE;
+	const raycastOrigin = positionBefore.clone().setY(positionBefore.y + px);
+	const jpositionBefore = Manager.Collisions._scratchJPositionBefore;
+	jpositionBefore.x = Math.floor(positionBefore.x);
+	jpositionBefore.y = Math.floor(positionBefore.y);
+	jpositionBefore.z = Math.floor(positionBefore.z);
+	const jpositionAfter = Manager.Collisions._scratchJPositionAfter;
+	jpositionAfter.x = Math.floor(positionAfter.x);
+	jpositionAfter.y = Math.floor(positionAfter.y);
+	jpositionAfter.z = Math.floor(positionAfter.z);
+	const positionAfterPlus = Manager.Collisions._scratchPositionAfterPlus;
+	const checkedSprites = new Set();
+	var [startI, endI, startJ, endJ, startK, endK] = object.getSquaresBB();
+	const bounds = object.currentBoundingBox?.geometry.boundingBox;
+	if (bounds)
 	{
-		// default collision test for sprites, plus a command to subtract the travelled distance
-		obj.currentBoundingBox = obj.meshBoundingBox[i];
-		result = Manager.Collisions.checkSprites(mp, p, [], obj);
-		if (!!result && result[0])
+		const tileX = Math.floor(positionAfter.x);
+		const tileZ = Math.floor(positionAfter.z);
+		startI = Math.max(startI, Math.floor(bounds.min.x) - tileX - 1);
+		endI = Math.min(endI, Math.floor(bounds.max.x) - tileX + 1);
+		startK = Math.max(startK, Math.floor(bounds.min.z) - tileZ - 1);
+		endK = Math.min(endK, Math.floor(bounds.max.z) - tileZ + 1);
+	}
+	var i, j, k, mapPortion, yMountain = null;
+	const chunkSize = Common.Constants.PORTION_SIZE;
+	const cp = Scene.Map.current.currentPortion;
+	const lp = Manager.Collisions._scratchCheckPortion;
+	const jp = Manager.Collisions._scratchCheckPosition;
+	for (i = startI; i <= endI; i++)
+	{
+		for (j = startJ; j <= endJ; j++)
 		{
-			obj.position.sub(v0);
-			return true;
-		}
-		if (Manager.Collisions.checkObjects3D(mp, p, pos, [], obj))
-			return true;
-
-		// raycast based collision chekcs. add 1 to y to avoid a bug where the character "sinks" in the ground
-		const origin = obj.position.clone().add(new THREE.Vector3(b[i][0], b[i][1] + 1, b[i][2]));
-
-		// an approximation to avoid unnecessary calculations
-		const xz = Math.sqrt(Math.pow(b[i][3], 2) + Math.pow(b[i][5], 2)) / 2;
-
-		if (!obstacles)
-			continue;
-
-		// branch into horizontal and vertical movement
-		if (v0.y != 0)
-		{
-			// vertical check. start at the center of the box
-			raycaster.far = v0.length() + b[i][4] / 2 + 1;
-			raycaster.set(origin, dir);
-			intersect = raycaster.intersectObjects(obstacles);
-			if (intersect.length > 0)
-				return true;
-		}
-		else
-		{
-			// horizontal check. start at base, middle and top of the object's collision box, horizontally centered
-			raycaster.far = v0.length() + xz + 1;
-			const v = origin.clone();
-			v.y -= b[i][4] - 1;
-			for (var j = 0; j < 3; j++)
+			for (k = startK; k <= endK; k++)
 			{
-				v.y += b[i][4] / 2;
-				raycaster.set(v, dir);
-				intersect = raycaster.intersectObjects(obstacles);
-				if (intersect.length > 0)
+				positionAfterPlus.set(positionAfter.x + i, positionAfter.y + j, positionAfter.z + k);
+				lp.x = Math.floor(positionAfterPlus.x / chunkSize) - cp.x;
+				lp.y = Math.floor(positionAfterPlus.y / chunkSize) - cp.y;
+				lp.z = Math.floor(positionAfterPlus.z / chunkSize) - cp.z;
+				mapPortion = Scene.Map.current.getMapPortion(lp.x, lp.y, lp.z);
+				if (mapPortion)
 				{
-					//obj.position.sub(v0);
-					return true;
+					jp.x = jpositionAfter.x + i;
+					jp.y = jpositionAfter.y + j;
+					jp.z = jpositionAfter.z + k;
+					const result = Manager.Collisions.check(mapPortion, jpositionBefore, jp, positionAfter, object, direction, checkedSprites);
+					if (result[0])
+						return positionBefore;
+					if (direction.y == 0)
+					{
+						/*
+						const mountains = Manager.Collisions.checkMountains(mapPortion, jpositionAfter, positionAfter, object);
+						if (mountains[0])
+							return positionBefore;
+						if (mountains[1] !== null && (yMountain === null || yMountain < mountains[1]))
+							yMountain = mountains[1];
+						*/
+						if (result[1] !== null && (yMountain === null || yMountain < result[1]))
+							yMountain = result[1];
+					}
+					else
+					{
+						const mountains = Manager.Collisions.checkMountains(mapPortion, jpositionAfter, positionAfter, object);
+						if (mountains[0])
+							console.log("fuck my chud baka life");
+						const checkFloor = raycastFloors(mapPortion, raycastOrigin, direction, len + 2 * px);
+						if (!!checkFloor)
+							return checkFloor;
+					}
+					/*
+					const sprites = Manager.Collisions.checkSprites(mapPortion, jpositionAfter, object, checkedSprites);
+					if (sprites[0] || sprites[1] !== null)
+						return positionBefore;
+					if (Manager.Collisions.checkLands(mapPortion, jpositionBefore, jpositionAfter, object, direction))
+						return positionBefore;
+					if (Manager.Collisions.checkObjects3D(mapPortion, jpositionAfter, positionAfter, object))
+						return positionBefore;
+					*/
 				}
 			}
 		}
 	}
-	return false;
+	if (!!yMountain)
+		positionAfter.setY(yMountain);
+	mapPortion = Scene.Map.current.getMapPortionByPosition(jpositionAfter);
+	const checkUp = raycastFloors(mapPortion, positionAfter, up, px);
+	if (!!checkUp)
+		return checkUp;
+	const checkDown = raycastFloors(mapPortion, positionAfter, up, px);
+	if (!!checkDown)
+		return checkDown;
+	return positionAfter;
 }
 
 function moveHorizontal(obj, v0, time)
 {
 	obj.updateTerrain();
-	const pos = obj.position.clone().add(v0);
+	const fpos = obj.position.clone().add(v0);
 	const orig = obj.position.clone();
 	const m = Scene.Map.current;
 	const mp = m.mapProperties;
-	const s = Data.Systems.SQUARE_SIZE;
 
 	// add map loop compatibility
 	var blocked = false;
 	if (!m.mapLoopPlugin_loopX)
 	{
-		if (pos.x < 0 || pos.x >= mp.length * s)
+		if (fpos.x < 0 || fpos.x >= mp.length)
 			blocked = true;
 	}
 	else
 	{
-		if (pos.x < 0)
+		if (fpos.x < 0)
 		{
-			pos.x += mp.length * s;
-			obj.position.x += mp.length * s;
+			fpos.x += mp.length;
+			obj.position.x += mp.length;
 		}
-		if (pos.x >= mp.length * s)
+		if (fpos.x >= mp.length)
 		{
-			pos.x -= mp.length * s;
-			obj.position.x -= mp.length * s;
+			fpos.x -= mp.length;
+			obj.position.x -= mp.length;
 		}
 	}
 	if (!m.mapLoopPlugin_loopZ)
 	{
-		if (pos.z < 0 || pos.z >= mp.width * s)
+		if (fpos.z < 0 || fpos.z >= mp.width)
 			blocked = true;
 	}
 	else
 	{
-		if (pos.z < 0)
+		if (fpos.z < 0)
 		{
-			pos.z += mp.width * s;
-			obj.position.z += mp.width * s;
+			fpos.z += mp.width;
+			obj.position.z += mp.width;
 		}
-		if (pos.z >= mp.width * s)
+		if (fpos.z >= mp.width)
 		{
-			pos.z -= mp.width * s;
-			obj.position.z -= mp.width * s;
+			fpos.z -= mp.width;
+			obj.position.z -= mp.width;
 		}
 	}
 
-	if (!blocked && !checkCollisions(obj, v0, pos))
-	{
-		obj.position = pos;
-		if (Core.Game.current.playTime.time < time)
-			setTimeout(moveHorizontal, timeout, obj, v0, time);
-	}
-	else
-		obj.position = orig;
+	obj.position = getFuturePosition(obj, orig, fpos);
+	if (!blocked && Core.Game.current.playTime.time < time)
+		setTimeout(moveHorizontal, timeout, obj, v0, time);
 	obj.updateBBPosition(obj.position);
 }
 
 function moveVertical(obj, vy)
 {
+	//console.log(vy);
 	if (obj.jumpPlugin_fixedVelocityEnabled && !obj.jumpPlugin_jumpFlag)
-	{
 		vy = obj.jumpPlugin_fixedVelocity;
-	}
-	else if (obj.jumpPlugin_jumpFlag && vy <= 0)
+	if (/*obj.jumpPlugin_jumpFlag &&*/ vy <= 0)
 	{
 		obj.jumpPlugin_jumpFlag = false;
 		obj.jumpPlugin_fallFlag = true;
 	}
-	const v0 = new THREE.Vector3(0, vy, 0);
-	const fpos = obj.position.clone().add(v0);
-	if (!checkCollisions(obj, v0, fpos))
+	const orig = obj.position.clone();
+	const fpos = obj.position.clone().setY(obj.position.y + vy);
+	obj.position = getFuturePosition(obj, orig, fpos);
+	if (obj.position.y != orig.y)
 	{
-		obj.position = fpos;
-		setTimeout(moveVertical, timeout, obj, vy - gravity * Data.Systems.SQUARE_SIZE);
+		//console.log("keep going");
+		setTimeout(moveVertical, timeout, obj, vy - gravity, vy);
 	}
 	else if (vy > 0)
-		setTimeout(moveVertical, timeout, obj, -gravity * Data.Systems.SQUARE_SIZE);
+	{
+		//console.log("hit");
+		setTimeout(moveVertical, timeout, obj, -gravity, 0);
+	}
 	else
 	{
-		if (isAirborne(obj))
-			setTimeout(moveVertical, timeout, obj, 0);
-		else
-			obj.jumpPlugin_fallFlag = false;
+		/*
+		const px = 1.0 / Data.Systems.SQUARE_SIZE;
+		for (var i = vy + px; i < 0; i += px)
+		{
+			console.log(i);
+			const before = obj.position.y;
+			fpos.setY(orig.y + i);
+			obj.position = getFuturePosition(obj, orig, fpos);
+			if (obj.position.y != before)
+				break;
+		}
+		*/
+		obj.jumpPlugin_fallFlag = false;
+		//console.log("finally...");
 	}
 	obj.updateBBPosition(obj.position);
 }
 
 function isAirborne(obj)
 {
-	return !checkCollisions(obj, down, obj.position.clone().add(down));
+	return false;//!getFuturePosition(obj, down, obj.position.clone().add(down))[0];
 }
 
 Manager.Plugins.registerCommand(pluginName, "Jump", (id, peak) =>
@@ -192,7 +234,7 @@ Manager.Plugins.registerCommand(pluginName, "Jump", (id, peak) =>
 		result.object.jumpPlugin_jumpFlag = true;
 		result.object.jumpPlugin_fallFlag = false;
 		// consider v² = v0² + 2aΔs. we want to find v0. a = -gravity, Δs = peak, v = 0. then: v0 = √(2 * peak * gravity)
-		setTimeout(moveVertical, 1, result.object, Math.sqrt(2 * peak * gravity * Math.pow(Data.Systems.SQUARE_SIZE, 2)));
+		setTimeout(moveVertical, 1, result.object, Math.sqrt(2 * peak * gravity));
 	}, Core.ReactionInterpreter.currentObject);
 });
 
@@ -200,10 +242,10 @@ Manager.Plugins.registerCommand(pluginName, "Fall", (id) =>
 {
 	Core.MapObject.search(id, (result) =>
 	{
-		if (!checkCollisions(result.object, down, result.object.position.clone().add(down)) && !result.object.jumpPlugin_jumpFlag && !result.object.jumpPlugin_fallFlag)
+		if (/*isAirborne(result.object) &&*/ !result.object.jumpPlugin_jumpFlag && !result.object.jumpPlugin_fallFlag)
 		{
 			result.object.jumpPlugin_fallFlag = true;
-			setTimeout(moveVertical, 1, result.object, 0);
+			setTimeout(moveVertical, 1, result.object, -0.01);
 		}
 	}, Core.ReactionInterpreter.currentObject);
 });
@@ -213,7 +255,7 @@ Manager.Plugins.registerCommand(pluginName, "Maneuver", (id, x, z, spd, camera) 
 	Core.MapObject.search(id, (result) =>
 	{
 		const v = new THREE.Vector3(x, 0, z).normalize().applyAxisAngle(down, (camera ? Scene.Map.current.camera.horizontalAngle * Math.PI / 180 : -Math.PI / 2) + Math.PI / 2);
-		v.multiplyScalar(spd * result.object.speed.getValue() * Core.MapObject.SPEED_NORMAL * Data.Systems.SQUARE_SIZE * Manager.Stack.averageElapsedTime);
+		v.multiplyScalar(spd * result.object.speed.getValue() * Core.MapObject.SPEED_NORMAL * Manager.Stack.averageElapsedTime);
 		setTimeout(moveHorizontal, 1, result.object, v, 0);
 	}, Core.ReactionInterpreter.currentObject);
 });
