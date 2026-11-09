@@ -203,7 +203,7 @@ Manager.Plugins.registerCommand(pluginName, "Fall", (id) =>
 	}, Core.ReactionInterpreter.currentObject);
 });
 
-Manager.Plugins.registerCommand(pluginName, "Maneuver", (id, x, z, spd, camera) =>
+Manager.Plugins.registerCommand(pluginName, "Move", (id, x, z, spd, camera) =>
 {
 	Core.MapObject.search(id, (result) =>
 	{
@@ -213,7 +213,7 @@ Manager.Plugins.registerCommand(pluginName, "Maneuver", (id, x, z, spd, camera) 
 		setTimeout(moveHorizontal, 1, result.object, new THREE.Vector3(0, 0, v.z), 0);
 	}, Core.ReactionInterpreter.currentObject);
 });
-
+/*
 Manager.Plugins.registerCommand(pluginName, "Check ground", (id, prop) =>
 {
 	Core.MapObject.search(id, (result) =>
@@ -221,7 +221,7 @@ Manager.Plugins.registerCommand(pluginName, "Check ground", (id, prop) =>
 		Core.ReactionInterpreter.currentObject.properties[prop] = !isAirborne(result.object);
 	}, Core.ReactionInterpreter.currentObject);
 });
-
+*/
 Manager.Plugins.registerCommand(pluginName, "Set fixed velocity", (id, enable, value) =>
 {
 	Core.MapObject.search(id, (result) =>
